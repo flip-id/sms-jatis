@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const CURLOPT_PROXY = "10004"
@@ -95,12 +95,13 @@ type CallbackData struct {
 
 // SendSMS function to send message
 func (s *Sender) SendSMS(request ReqMessage) (ResponseBody, error) {
-	url := fmt.Sprintf("%s", s.Config.BaseUrl)
+	urlPath := fmt.Sprintf("%s", s.Config.BaseUrl)
+
 	payload, err := json.Marshal(ReqJatis{
 		UserId:    s.Config.UserId,
 		Password:  s.Config.Password,
 		Msisdn:    request.PhoneNumber,
-		Message:   request.Text,
+		Message:   url.QueryEscape(request.Text),
 		Sender:    s.Config.Sender,
 		Batchname: "otp",
 		Division:  s.Config.Division,
@@ -123,7 +124,7 @@ func (s *Sender) SendSMS(request ReqMessage) (ResponseBody, error) {
 		}
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(payload)))
+	req, err := http.NewRequest("POST", urlPath, bytes.NewBuffer([]byte(payload)))
 
 	if err != nil {
 		log.Error(err)
