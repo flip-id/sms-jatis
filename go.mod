@@ -1,4 +1,4 @@
-module sms-jatis
+module github.com/flip-id/sms-jatis
 
 go 1.15
 
