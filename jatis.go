@@ -1,17 +1,16 @@
 package sms_jatis
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const CURLOPT_PROXY = "10004"
@@ -55,83 +54,47 @@ type ReqMessage struct {
 
 // end of request
 
-// ReqJatis request for Jatis
-type ReqJatis struct {
-	UserId    string `json:"userid"`
-	Password  string `json:"password"`
-	Msisdn    string `json:"msisdn"`
-	Message   string `json:"message"`
-	Sender    string `json:"sender"`
-	Batchname string `json:"batchname"`
-	Division  string `json:"division"`
-	UploadBy  string `json:"uploadby"`
-	Channel   int    `json:"channel"`
-}
-
-// end of request
-
 func New(config Config) *Sender {
 	return &Sender{
 		Config: config,
 	}
 }
 
-// CallbackData callback data
-type CallbackData struct {
-	Error struct {
-		Description string `json:"description"`
-		GroupID     int    `json:"group_id"`
-		GroupName   string `json:"group_name"`
-		ID          int    `json:"id"`
-		Name        string `json:"name"`
-		Permanent   bool   `json:"permanent"`
-	} `json:"error"`
-	To     string `json:"to"`
-	Status int    `json:"status"`
-	SentAt string `json:"sent_at"`
-}
-
-// end of callback data
-
 // SendSMS function to send message
 func (s *Sender) SendSMS(request ReqMessage) (ResponseBody, error) {
 	urlPath := fmt.Sprintf("%s", s.Config.BaseUrl)
-
-	payload, err := json.Marshal(ReqJatis{
-		UserId:    s.Config.UserId,
-		Password:  s.Config.Password,
-		Msisdn:    request.PhoneNumber,
-		Message:   url.QueryEscape(request.Text),
-		Sender:    s.Config.Sender,
-		Batchname: "otp",
-		Division:  s.Config.Division,
-		UploadBy:  s.Config.UploadBy,
-		Channel:   s.Config.channel,
-	})
-
-	if err != nil {
-		log.Error(err)
-		return ResponseBody{}, err
-	}
+	data := url.Values{}
+	data.Set("userid", s.Config.UserId)
+	data.Set("password", s.Config.Password)
+	data.Set("msisdn", request.PhoneNumber)
+	data.Set("message", request.Text)
+	data.Set("sender", s.Config.Sender)
+	data.Set("batchname", "otp")
+	data.Set("division", s.Config.Division)
+	data.Set("uploadby", s.Config.UploadBy)
+	// set channel type
+	// 	0 : Normal SMS
+	//  1 : Alert SMS
+	//  2 : OTP SMS
+	data.Set("channel", "2")
 
 	// set proxy
 	proxyUrl := s.Config.ProxyUrl
 	if proxyUrl != "" {
-		err = os.Setenv(CURLOPT_PROXY, proxyUrl)
+		err := os.Setenv(CURLOPT_PROXY, proxyUrl)
 		if err != nil {
 			log.Error(err)
 			return ResponseBody{}, err
 		}
 	}
 
-	req, err := http.NewRequest("POST", urlPath, bytes.NewBuffer([]byte(payload)))
-
+	req, err := http.NewRequest("POST", urlPath, strings.NewReader(data.Encode()))
 	if err != nil {
 		log.Error(err)
 		return ResponseBody{}, err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "x-www-form-urlencoded")
 
 	timeout := s.Config.ConnectTimeout
 	client := &http.Client{
