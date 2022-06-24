@@ -1,19 +1,24 @@
 package sms_jatis
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 )
 
-const CURLOPT_PROXY = "10004"
+const (
+	CHANNEL_REGULAR = "0"
+	CHANNEL_ALERT   = "1"
+	CHANNEL_OTP     = "2"
+)
 
 // Config config app for Jatis
 type Config struct {
@@ -24,7 +29,6 @@ type Config struct {
 	Division       string
 	UploadBy       string
 	channel        int
-	ProxyUrl       string
 	ConnectTimeout int
 }
 
@@ -34,14 +38,10 @@ type Sender struct {
 
 // end of config
 
-// Message Response from Jatis
-type Message struct {
-	To     string
-	Status string
-}
-
 type ResponseBody struct {
-	Message Message
+	MessageId string
+	To        string
+	Status    string
 }
 
 // end of response
@@ -61,7 +61,7 @@ func New(config Config) *Sender {
 }
 
 // SendSMS function to send message
-func (s *Sender) SendSMS(request ReqMessage) (ResponseBody, error) {
+func (s *Sender) SendSMS(ctx context.Context, request ReqMessage) (respBody ResponseBody, err error) {
 	urlPath := fmt.Sprintf("%s", s.Config.BaseUrl)
 	data := url.Values{}
 	data.Set("userid", s.Config.UserId)
@@ -72,26 +72,13 @@ func (s *Sender) SendSMS(request ReqMessage) (ResponseBody, error) {
 	data.Set("batchname", "otp")
 	data.Set("division", s.Config.Division)
 	data.Set("uploadby", s.Config.UploadBy)
-	// set channel type
-	// 	0 : Normal SMS
-	//  1 : Alert SMS
-	//  2 : OTP SMS
-	data.Set("channel", "2")
+	data.Set("channel", CHANNEL_OTP)
 
-	// set proxy
-	proxyUrl := s.Config.ProxyUrl
-	if proxyUrl != "" {
-		err := os.Setenv(CURLOPT_PROXY, proxyUrl)
-		if err != nil {
-			log.Error(err)
-			return ResponseBody{}, err
-		}
-	}
-
-	req, err := http.NewRequest("POST", urlPath, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlPath, strings.NewReader(data.Encode()))
 	if err != nil {
 		log.Error(err)
-		return ResponseBody{}, err
+		err = errors.New(JatisError[ErrorInternal])
+		return
 	}
 
 	req.Header.Set("Content-Type", "x-www-form-urlencoded")
@@ -101,30 +88,42 @@ func (s *Sender) SendSMS(request ReqMessage) (ResponseBody, error) {
 		Timeout: time.Duration(timeout) * time.Second,
 	}
 	res, err := client.Do(req)
-
 	if err != nil {
+		err = errors.New(JatisError[ErrorInternal])
 		log.Error(err)
-		return ResponseBody{}, err
 	}
 
 	if res.StatusCode >= 400 {
 		log.Error(res)
-		return ResponseBody{}, errors.New("failed to send SMS")
+		err = errors.New(JatisError[ErrorInternal])
+		return
 	}
 
 	defer res.Body.Close()
 
 	body, err := ioutil.ReadAll(res.Body)
-	resBody := ResponseBody{}
-
 	if err != nil {
 		log.Error(res)
-		return ResponseBody{}, err
+		err = errors.New(JatisError[ErrorInternal])
+		return
 	}
 
-	status := strings.Replace(string(body), "Status=", "", 1)
-	resBody.Message.To = request.PhoneNumber
-	resBody.Message.Status = status
+	respMap, err := url.ParseQuery(string(body))
+	if err != nil {
+		return
+	}
 
-	return resBody, nil
+	respBody.To = request.PhoneNumber
+	respBody.Status = respMap["Status"][0]
+	// ommit error checking, worst case will be zero
+	respStatus, _ := strconv.Atoi(respBody.Status)
+	if respStatus != StatusSuccess {
+		// return human readable error message
+		respBody.Status = JatisError[respStatus]
+		err = errors.New(JatisError[respStatus])
+		return
+	}
+	respBody.MessageId = respMap["MessageId"][0]
+
+	return respBody, nil
 }
