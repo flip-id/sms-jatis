@@ -3,7 +3,6 @@ package sms_jatis
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -28,7 +27,6 @@ type Config struct {
 	Sender         string
 	Division       string
 	UploadBy       string
-	channel        int
 	ConnectTimeout int
 }
 
@@ -62,7 +60,6 @@ func New(config Config) *Sender {
 
 // SendSMS function to send message
 func (s *Sender) SendSMS(ctx context.Context, request ReqMessage) (respBody ResponseBody, err error) {
-	urlPath := fmt.Sprintf("%s", s.Config.BaseUrl)
 	data := url.Values{}
 	data.Set("userid", s.Config.UserId)
 	data.Set("password", s.Config.Password)
@@ -74,7 +71,7 @@ func (s *Sender) SendSMS(ctx context.Context, request ReqMessage) (respBody Resp
 	data.Set("uploadby", s.Config.UploadBy)
 	data.Set("channel", CHANNEL_OTP)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlPath, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.Config.BaseUrl, strings.NewReader(data.Encode()))
 	if err != nil {
 		log.Error(err)
 		err = errors.New(JatisError[ErrorInternal])
@@ -91,6 +88,7 @@ func (s *Sender) SendSMS(ctx context.Context, request ReqMessage) (respBody Resp
 	if err != nil {
 		err = errors.New(JatisError[ErrorInternal])
 		log.Error(err)
+		return
 	}
 
 	if res.StatusCode >= 400 {
