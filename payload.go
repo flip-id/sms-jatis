@@ -7,9 +7,12 @@ import (
 	"strconv"
 )
 
+// ChannelType specifies the channel type used in this package.
+type ChannelType uint64
+
 // List of channel used in Jatis.
 const (
-	ChannelRegular uint64 = iota
+	ChannelRegular ChannelType = iota
 	ChannelAlert
 	ChannelOTP
 )
@@ -25,7 +28,7 @@ const (
 type ResponseMessage struct {
 	MessageID    string
 	Status       string
-	StatusNumber uint64
+	StatusNumber StatusParam
 }
 
 // List of key used to access the value of URL decoded values.
@@ -36,8 +39,8 @@ const (
 
 func (r *ResponseMessage) assign(val url.Values) *ResponseMessage {
 	r.MessageID = val.Get(KeyURLDecodedMessageID)
-	r.StatusNumber = reflecthelper.GetUint(val.Get(KeyURLDecodedStatus))
-	r.Status = statusMapping[r.StatusNumber]
+	r.StatusNumber = StatusParam(reflecthelper.GetUint(val.Get(KeyURLDecodedStatus)))
+	r.Status = r.StatusNumber.String()
 	return r
 }
 
@@ -46,7 +49,7 @@ type RequestMessage struct {
 	PhoneNumber string
 	Text        string
 	BatchName   string
-	Channel     *uint64
+	Channel     *ChannelType
 }
 
 func (r *RequestMessage) getChannel() string {
@@ -54,10 +57,10 @@ func (r *RequestMessage) getChannel() string {
 		return ""
 	}
 
-	return strconv.FormatUint(*r.Channel, DefaultBaseDecimal)
+	return strconv.FormatUint(uint64(*r.Channel), DefaultBaseDecimal)
 }
 
-func getChannelOTP() *uint64 {
+func getChannelOTP() *ChannelType {
 	chanOTP := ChannelOTP
 	return &chanOTP
 }

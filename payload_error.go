@@ -2,9 +2,17 @@ package sms_jatis
 
 import "fmt"
 
+// StatusParam is the status parameter in the response message.
+type StatusParam uint64
+
+// String returns the string representation of the status param.
+func (s StatusParam) String() string {
+	return statusMapping[s]
+}
+
 // List of all status parameters used in Jatis.
 const (
-	StatusSuccess uint64 = iota + 1
+	StatusSuccess StatusParam = iota + 1
 	StatusMissingParameter
 	StatusInvalidUserIDOrPassword
 	StatusInvalidMessage
@@ -17,12 +25,12 @@ const (
 
 // List of all status parameters used in Jatis.
 const (
-	StatusInvalidChannel uint64 = iota + 20
+	StatusInvalidChannel StatusParam = iota + 20
 	StatusTokenNotEnough
 	StatusTokenNotAvailable
 )
 
-var statusMapping = map[uint64]string{
+var statusMapping = map[StatusParam]string{
 	StatusSuccess:                 "Success",
 	StatusMissingParameter:        "Missing Parameter",
 	StatusInvalidUserIDOrPassword: "Invalid User Id or Password",

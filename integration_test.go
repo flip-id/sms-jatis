@@ -48,7 +48,7 @@ func setupClient() {
 			WithSender(os.Getenv("SMS_JATIS_SENDER")),
 			WithDivision(os.Getenv("SMS_JATIS_DIVISION")),
 			WithUploadBy(os.Getenv("SMS_JATIS_UPLOAD_BY")),
-			WithChannel(channelSMS),
+			WithChannel(ChannelType(channelSMS)),
 			WithCustomIPs(os.Getenv("SMS_JATIS_CUSTOM_IP")),
 		)
 		if err != nil {
@@ -81,7 +81,7 @@ func TestSendMessageSuccessful(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, StatusSuccess, resp.StatusNumber)
-	assert.Equal(t, statusMapping[StatusSuccess], resp.Status)
+	assert.Equal(t, StatusSuccess.String(), resp.Status)
 	assert.NotEmpty(t, resp.MessageID)
 }
 
@@ -100,7 +100,7 @@ func TestSendMessageFailed(t *testing.T) {
 		assert.Equal(t, reflect.TypeOf(new(ResponseMessage)), reflect.TypeOf(err))
 		resp = err.(*ResponseMessage)
 		assert.Equal(t, StatusMissingParameter, resp.StatusNumber)
-		assert.Equal(t, statusMapping[StatusMissingParameter], resp.Status)
+		assert.Equal(t, StatusMissingParameter.String(), resp.Status)
 		assert.Empty(t, resp.MessageID)
 	})
 
