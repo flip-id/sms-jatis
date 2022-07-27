@@ -9,7 +9,7 @@ import (
 
 // List of channel used in Jatis.
 const (
-	ChannelRegular uint = iota
+	ChannelRegular uint64 = iota
 	ChannelAlert
 	ChannelOTP
 )
@@ -46,7 +46,7 @@ type RequestMessage struct {
 	PhoneNumber string
 	Text        string
 	BatchName   string
-	Channel     *uint
+	Channel     *uint64
 }
 
 func (r *RequestMessage) getChannel() string {
@@ -54,10 +54,10 @@ func (r *RequestMessage) getChannel() string {
 		return ""
 	}
 
-	return strconv.FormatUint(uint64(*r.Channel), DefaultBaseDecimal)
+	return strconv.FormatUint(*r.Channel, DefaultBaseDecimal)
 }
 
-func getChannelOTP() *uint {
+func getChannelOTP() *uint64 {
 	chanOTP := ChannelOTP
 	return &chanOTP
 }

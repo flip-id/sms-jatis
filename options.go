@@ -24,7 +24,7 @@ type Option struct {
 	Sender         string
 	Division       string
 	UploadBy       string
-	Channel        *uint
+	Channel        *uint64
 	CustomIPs      []string
 	Timeout        time.Duration
 	Client         heimdall.Doer
@@ -78,7 +78,7 @@ func WithUploadBy(uploadBy string) FnOption {
 }
 
 // WithChannel sets the channel for the Jatis API.
-func WithChannel(channel uint) FnOption {
+func WithChannel(channel uint64) FnOption {
 	return func(o *Option) {
 		o.Channel = &channel
 	}

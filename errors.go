@@ -21,7 +21,7 @@ func getUnknownErr(resp *http.Response, byteBody []byte) (err error) {
 	return
 }
 
-// UnknownError is an error that is not defined by the documentation from the ValueFirst.
+// UnknownError is an error that is not defined by the documentation from the SMS Jatis.
 type UnknownError struct {
 	StatusCode int    `json:"status_code"`
 	Message    []byte `json:"message"`
