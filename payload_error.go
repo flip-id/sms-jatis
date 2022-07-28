@@ -1,9 +1,17 @@
 package sms_jatis
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // StatusParam is the status parameter in the response message.
 type StatusParam uint64
+
+// Uint64String converts the uint64 to the string version.
+func (s StatusParam) Uint64String() string {
+	return strconv.FormatUint(uint64(s), DefaultBaseDecimal)
+}
 
 // String returns the string representation of the status param.
 func (s StatusParam) String() string {
