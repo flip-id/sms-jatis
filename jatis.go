@@ -1,108 +1,136 @@
 package sms_jatis
 
 import (
+	"bytes"
 	"context"
-	"errors"
-	"io/ioutil"
+	"github.com/fairyhunter13/pool"
+	"github.com/gofiber/fiber/v2"
+	"io"
 	"net/http"
 	"net/url"
-	"strconv"
-	"strings"
-	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
+// Client is the interface of Jatis SMS client.
+type Client interface {
+	// SendSMS sends message to the Jatis platform.
+	SendSMS(ctx context.Context, request *RequestMessage) (respBody *ResponseMessage, err error)
+}
+
+type client struct {
+	opt *Option
+}
+
+func (c *client) Assign(o *Option) *client {
+	if o == nil {
+		return c
+	}
+
+	c.opt = o.Clone()
+	return c
+}
+
+// NewClient initializes a new client with the given option.
+func NewClient(opts ...FnOption) (c Client) {
+	o := (new(Option)).Assign(opts...).Default()
+	c = (new(client)).Assign(o)
+	return
+}
+
+// List of form keys used for request in Jatis.
 const (
-	CHANNEL_REGULAR = "0"
-	CHANNEL_ALERT   = "1"
-	CHANNEL_OTP     = "2"
+	FormKeyUserID    = "userid"
+	FormKeyPassword  = "password"
+	FormKeySender    = "sender"
+	FormKeyMSISDN    = "msisdn"
+	FormKeyMessage   = "message"
+	FormKeyDivision  = "division"
+	FormKeyBatchName = "batchname"
+	FormKeyUploadBy  = "uploadby"
+	FormKeyChannel   = "channel"
 )
 
-// Config config app for Jatis
-type Config struct {
-	BaseUrl        string
-	UserId         string
-	Password       string
-	Sender         string
-	Division       string
-	UploadBy       string
-	ConnectTimeout int
-}
-
-type Sender struct {
-	Config Config
-}
-
-// end of config
-
-type ResponseBody struct {
-	MessageId string
-	To        string
-	Status    string
-}
-
-// end of response
-
-// ReqMessage Request for client
-type ReqMessage struct {
-	PhoneNumber string
-	Text        string
-}
-
-// end of request
-
-func New(config Config) *Sender {
-	return &Sender{
-		Config: config,
-	}
-}
-
-// SendSMS function to send message
-func (s *Sender) SendSMS(ctx context.Context, request ReqMessage) (respBody ResponseBody, err error) {
+func (c *client) getRequestFormData(req *RequestMessage) url.Values {
 	data := url.Values{}
-	data.Set("userid", s.Config.UserId)
-	data.Set("password", s.Config.Password)
-	data.Set("msisdn", request.PhoneNumber)
-	data.Set("message", request.Text)
-	data.Set("sender", s.Config.Sender)
-	data.Set("batchname", "otp")
-	data.Set("division", s.Config.Division)
-	data.Set("uploadby", s.Config.UploadBy)
-	data.Set("channel", CHANNEL_OTP)
+	data.Set(FormKeyUserID, c.opt.UserID)
+	data.Set(FormKeyPassword, c.opt.Password)
+	data.Set(FormKeyMSISDN, req.PhoneNumber)
+	data.Set(FormKeyMessage, req.Text)
+	data.Set(FormKeySender, c.opt.Sender)
+	data.Set(FormKeyBatchName, req.BatchName)
+	data.Set(FormKeyDivision, c.opt.Division)
+	data.Set(FormKeyUploadBy, c.opt.UploadBy)
+	data.Set(FormKeyChannel, req.getChannel())
+	return data
+}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.Config.BaseUrl, strings.NewReader(data.Encode()))
+func (c *client) writeRequest(buff *bytes.Buffer, request *RequestMessage) (err error) {
+	data := c.getRequestFormData(request.Default(c.opt))
+	_, err = buff.WriteString(data.Encode())
+	return
+}
+
+func (c *client) prepareRequest(ctx context.Context, buff *bytes.Buffer) (req *http.Request, err error) {
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, c.opt.BaseURL, buff)
 	if err != nil {
-		log.Error(err)
-		err = errors.New(JatisError[ErrorInternal])
 		return
 	}
 
-	req.Header.Set("Content-Type", "x-www-form-urlencoded")
-
-	timeout := s.Config.ConnectTimeout
-	client := &http.Client{
-		Timeout: time.Duration(timeout) * time.Second,
+	req.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationForm)
+	for _, ipStr := range c.opt.CustomIPs {
+		req.Header.Set(fiber.HeaderXForwardedFor, ipStr)
 	}
-	res, err := client.Do(req)
+	return
+}
+
+func (c *client) doRequest(ctx context.Context, request *RequestMessage) (resp *http.Response, err error) {
+	buff := pool.GetBuffer()
+	defer pool.Put(buff)
+
+	err = c.writeRequest(buff, request)
 	if err != nil {
-		err = errors.New(JatisError[ErrorInternal])
-		log.Error(err)
 		return
 	}
 
-	if res.StatusCode >= 400 {
-		log.Error(res)
-		err = errors.New(JatisError[ErrorInternal])
+	req, err := c.prepareRequest(ctx, buff)
+	if err != nil {
 		return
 	}
 
-	defer res.Body.Close()
+	resp, err = c.opt.client.Do(req)
+	return
+}
 
-	body, err := ioutil.ReadAll(res.Body)
+func (c *client) getResponseBody(resp *http.Response) (byteBody []byte, err error) {
+	byteBody, err = io.ReadAll(resp.Body)
 	if err != nil {
-		log.Error(res)
-		err = errors.New(JatisError[ErrorInternal])
+		return
+	}
+
+	err = getUnknownErr(resp, byteBody)
+	return
+}
+
+// SendSMS sends message to the Jatis platform.
+func (c *client) SendSMS(ctx context.Context, request *RequestMessage) (response *ResponseMessage, err error) {
+	if request == nil {
+		err = ErrNilArgs
+		return
+	}
+
+	resp, err := c.doRequest(ctx, request)
+	defer func() {
+		if resp == nil || resp.Body == nil {
+			return
+		}
+
+		_ = resp.Body.Close()
+	}()
+	if err != nil {
+		return
+	}
+
+	body, err := c.getResponseBody(resp)
+	if err != nil {
 		return
 	}
 
@@ -111,17 +139,8 @@ func (s *Sender) SendSMS(ctx context.Context, request ReqMessage) (respBody Resp
 		return
 	}
 
-	respBody.To = request.PhoneNumber
-	respBody.Status = respMap["Status"][0]
-	// ommit error checking, worst case will be zero
-	respStatus, _ := strconv.Atoi(respBody.Status)
-	if respStatus != StatusSuccess {
-		// return human readable error message
-		respBody.Status = JatisError[respStatus]
-		err = errors.New(JatisError[respStatus])
-		return
-	}
-	respBody.MessageId = respMap["MessageId"][0]
-
-	return respBody, nil
+	response, err = (new(ResponseMessage)).
+		assign(respMap).
+		getRespAndErr()
+	return
 }
