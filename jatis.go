@@ -63,8 +63,7 @@ func (c *client) getRequestFormData(req *RequestMessage) url.Values {
 	return data
 }
 
-func (c *client) prepareBuff(request *RequestMessage) (buff *bytes.Buffer, err error) {
-	buff = pool.GetBuffer()
+func (c *client) writeRequest(buff *bytes.Buffer, request *RequestMessage) (err error) {
 	data := c.getRequestFormData(request.Default(c.opt))
 	_, err = buff.WriteString(data.Encode())
 	return
@@ -84,8 +83,10 @@ func (c *client) prepareRequest(ctx context.Context, buff *bytes.Buffer) (req *h
 }
 
 func (c *client) doRequest(ctx context.Context, request *RequestMessage) (resp *http.Response, err error) {
-	buff, err := c.prepareBuff(request)
+	buff := pool.GetBuffer()
 	defer pool.Put(buff)
+
+	err = c.writeRequest(buff, request)
 	if err != nil {
 		return
 	}
