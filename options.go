@@ -18,18 +18,20 @@ const (
 
 // Option is a struct containing all configurations for Jatis.
 type Option struct {
-	BaseURL        string
-	UserID         string
-	Password       string
-	Sender         string
-	Division       string
-	UploadBy       string
-	Channel        *ChannelType
-	CustomIPs      []string
-	Timeout        time.Duration
-	Client         heimdall.Doer
-	HystrixOptions []hystrix.Option
-	client         *hystrix.Client
+	BaseURL            string
+	DeliveryReportPath string
+	SendMessagePath    string
+	UserID             string
+	Password           string
+	Sender             string
+	Division           string
+	UploadBy           string
+	Channel            *ChannelType
+	CustomIPs          []string
+	Timeout            time.Duration
+	Client             heimdall.Doer
+	HystrixOptions     []hystrix.Option
+	client             *hystrix.Client
 }
 
 // FnOption is a function that modifies Option.
